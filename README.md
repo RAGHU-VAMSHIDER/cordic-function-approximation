@@ -1,103 +1,77 @@
-# CORDIC — Verilog Design, MATLAB Cross‑Check, and Verification Flow
+# CORDIC — Verilog + MATLAB (informal)
 
-This repository contains a Verilog CORDIC design together with MATLAB-based golden-model generation and simulation artifacts for cross-checking the RTL results. The project is focused on the design and verification of a CORDIC module in Verilog and validating its functional correctness and numerical accuracy by cross-checking outputs against MATLAB reference results.
+Hey — this repo is my CORDIC design playground: a Verilog implementation of a CORDIC module plus MATLAB stuff to generate golden results and cross-check the RTL. The goal: design the core in Verilog, simulate it, and verify correctness & numerical accuracy against MATLAB outputs.
 
-Quick summary
-- RTL design in Verilog (synthesizable CORDIC core)
-- MATLAB scripts to generate golden outputs and analyze errors
-- Simulation sources and outputs to compare RTL vs MATLAB
-- Automation scripts to run simulation and perform comparisons
+This README is intentionally informal — quick, to the point, and focused on getting you running.
 
-Repository layout (as found at the top level)
+What’s in this repo (top-level)
 - README.md (this file)
-- matlab generated files/        — directory containing MATLAB-produced CSV/MAT outputs (golden vectors, plots, etc.)
-- matlab source/                 — MATLAB sources (vector generation, analysis, plotting)
-- simulation source/             — testbench, simulation harness, runner scripts
-- simulation_outputs/            — produced simulation outputs (CSV, VCD, traces)
-- verilog desigen sorces/        — Verilog RTL sources (note: directory name contains a typo)
+- matlab generated files/        — MATLAB output (CSV/MAT, plots) (note: has spaces)
+- matlab source/                 — MATLAB scripts (vector/golden generation, analysis)
+- simulation source/             — testbench, sim runner scripts
+- simulation_outputs/            — where sim stuff ends up (CSV, waveforms)
+- verilog desigen sorces/        — Verilog RTL (typo present in dir name)
 
-Note about directory names
-- I found the repository contains these directories and their names exactly as listed above. I recommend renaming `verilog desigen sorces` → `verilog_design_sources` (or `rtl/`) and `matlab generated files` → `matlab_generated_files` for consistency and easier scripting. This is optional but will reduce issues when writing scripts that assume no spaces or typos in paths.
+Quick notes about the repo layout
+- Directories have spaces and a typo: `verilog desigen sorces` and `matlab generated files`. It works, but it’s annoying when scripting. Consider renaming them to `verilog_design_sources` and `matlab_generated_files` later.
 
-What you should expect inside each directory
-- matlab source/
-  - Scripts to generate input vectors and golden reference outputs (CSV/MAT).
-  - Analysis scripts that compute error metrics (max abs error, RMSE) and produce plots comparing RTL vs MATLAB.
-- matlab generated files/
-  - CSV/MAT files with golden reference results produced by MATLAB (e.g., `golden_results.csv`, `test_vectors.csv`).
-  - Optional plots or data used by the simulation flow.
-- verilog desigen sorces/
-  - The synthesizable CORDIC RTL (core module(s)) and parameter/header files that set Q-formats and iteration count.
-- simulation source/
-  - Verilog testbench(s) that read test vectors (CSV), drive the DUT, and write out RTL results.
-  - Simulation runner scripts (e.g., for iverilog/vvp or ModelSim/Questa).
-- simulation_outputs/
-  - Output CSVs from the RTL simulation, VCD/FSDB waveform files, and compare reports.
+Quick start (the short route)
+Prereqs:
+- MATLAB (or Octave if you tweak scripts)
+- Icarus Verilog (iverilog + vvp) or ModelSim/Questa
+- Python3 (optional, for comparison scripts)
+- gtkwave (optional)
 
-Quick start (generic — adapt to exact filenames in your repo)
-
-Prerequisites
-- MATLAB (or Octave; some scripts may require MATLAB toolboxes)
-- Icarus Verilog (iverilog + vvp) or ModelSim/Questa for RTL simulation
-- Python 3 (optional; for comparison scripts)
-- gtkwave (optional; for waveform viewing)
-
-1) Generate MATLAB golden vectors and references
-- Open MATLAB and run the generation script (replace `gen_vectors.m` with actual script name in `matlab source/`):
+1) Generate golden vectors in MATLAB
+- Open MATLAB and run the generator in `matlab source/` (file name may vary).
+- Example (replace script name with the real one in the folder):
   matlab -batch "run('matlab source/gen_vectors.m')"
-- Expected output: CSV/MAT files in `matlab generated files/` (e.g., `test_vectors.csv`, `golden_results.csv`).
+- This should drop CSV/MAT golden files into `matlab generated files/`.
 
-2) Run Verilog simulation
-- Ensure the testbench reads the MATLAB-produced input file(s).
-- Example using iverilog (adjust filenames to match the repo):
+2) Run the Verilog sim
+- Compile + run the TB (adjust file names to match repo contents):
   mkdir -p simulation_outputs
-  iverilog -g2005 -o simulation_outputs/tb.vvp \
-    "verilog desigen sorces/cordic.v" "simulation source/tb_cordic.v"
+  iverilog -g2005 -o simulation_outputs/tb.vvp "verilog desigen sorces/cordic.v" "simulation source/tb_cordic.v"
   vvp simulation_outputs/tb.vvp
-- The testbench should create an RTL results CSV inside `simulation_outputs/`.
+- The TB should read the MATLAB CSV and write RTL results to `simulation_outputs/rtl_results.csv`.
 
-3) Compare RTL outputs to MATLAB golden references
-- Use a comparison script (MATLAB or Python) to compute errors:
-  python3 simulation source/compare_results.py \
-    --gold "matlab generated files/golden_results.csv" \
-    --rtl "simulation_outputs/rtl_results.csv" \
-    --out "simulation_outputs/compare_report.json"
-- Or run MATLAB analyze script:
+3) Compare results (MATLAB or Python)
+- Either run a Python script in `simulation source/` that compares CSVs, or use a MATLAB analysis script.
+- Example (python compare script):
+  python3 "simulation source/compare_results.py" --gold "matlab generated files/golden_results.csv" --rtl "simulation_outputs/rtl_results.csv" --out "simulation_outputs/compare_report.json"
+- Or in MATLAB:
   matlab -batch "run('matlab source/analyze_results.m')"
 
-Verification flow & acceptance criteria
-- Generate comprehensive vectors: uniform sweep across angle domain, edge cases (0, ±π/2, ±π, ±2π), and random vectors.
-- Ensure Q-format agreement: The MATLAB golden must be quantized to the same fixed-point representation used by the RTL before comparison.
-- Acceptance metrics:
-  - Max absolute error less than a target (e.g., < 2^-14 for a 16-bit Q-format).
-  - RMSE within expected bounds determined by iteration count and word width.
-  - No functional mismatches for edge inputs (wrap/normalization working correctly).
+What to check when things don’t match
+- Q-format mismatch: Make sure MATLAB quantizes to the same fixed-point format (Qm.n) the RTL uses.
+- Scaling / CORDIC gain: rotation-mode outputs usually need 1/K compensation — confirm both models do the same.
+- Angle normalization: confirm both models use the same angle domain/wrap rules ([-pi, pi], [-pi/2, pi/2], etc.).
+- File paths: spaces in folder names can break TB scripts; run simulator from repo root or update TB file paths.
 
-Common pitfalls and checks
-- Mismatched Q-format / scaling: Confirm the MATLAB script and RTL use the same integer/fraction bits and gain compensation. Rotation mode outputs usually require CORDIC gain compensation (multiply by 1/K or integrate compensation into iterations).
-- Angle normalization: Ensure both models normalize angles the same way (e.g., wrap to [-π/2, π/2] or [-π, π]).
-- CSV format and file paths: Testbench path must match where MATLAB writes vectors; avoid spaces in filenames (current repo uses spaces in directory names).
-- Simulation working directory: Some TBs use relative paths — run the simulator from the repository root or update paths in the TB.
+Suggested acceptance criteria (simple)
+- Max abs error below your target (e.g., < 2^-14 for a 16-bit design)
+- RMSE small and consistent with chosen iterations and bitwidth
+- No crashes or obvious misbehavior at edge inputs (0, ±π/2, ±π, ±2π)
 
-Suggested next improvements (actionable)
-- Remove spaces and fix typos in directory names to avoid quoting issues in scripts.
-- Add a short `run_all.sh` or Makefile at the repo root that:
-  - Runs MATLAB vector generation
-  - Compiles & runs the RTL simulation
-  - Runs the comparison script and saves a report
-- Add a small example that demonstrates running one vector through RTL and MATLAB and shows the numerical difference.
-- Add a LICENSE file and a contributor guide if you plan to accept PRs.
+Tips & small improvements you can add
+- Rename directories to remove spaces and fix typos.
+- Add a top-level run_all.sh or Makefile to:
+  1) run MATLAB vector gen
+  2) compile & run Verilog sim
+  3) run the comparison script
+  This makes demos and CI way easier.
+- Add a short example showing one angle fed through MATLAB and RTL and printed side-by-side.
+- Add a LICENSE and short CONTRIBUTING.md if you want PRs.
 
-Contact / author
-- Repository owner: RAGHU-VAMSHIDER (use GitHub for issues / PRs)
+A short troubleshooting checklist
+- Does the TB read the CSV you just created? (check path / delimiter / column order)
+- Is MATLAB using the same fixed-point bits and scaling as RTL?
+- Did you forget the CORDIC K gain compensation?
+- If using ModelSim, run the .do to open waveforms and inspect signals.
 
-License
-- Please add or confirm a license in the repository root (MIT suggested for academic/demo code).
+If you want, I can:
+- List all files inside each directory and then rewrite this README to reference exact filenames and commands.
+- Add a runnable run_all.sh that uses the actual filenames present in the repo (I’ll need to list files first).
+- Make the tone even more casual or more formal — your call.
 
----
-
-If you’d like, I can now:
-- Inspect the contents of each directory (list all files under each) and update this README with exact filenames, commands and tailored examples that reference the real scripts and modules in the repository.
-- Or I can create a small `run_all.sh` that wires the MATLAB generation, iverilog compilation, and comparison steps together (I will need to read the exact filenames first).
-
-Which of these should I do next? I can start by listing the files inside `verilog desigen sorces`, `matlab source`, and `simulation source` so I can produce an exact, ready-to-run README and helper scripts.
+Which one next? Want me to list files in `verilog desigen sorces`, `matlab source`, and `simulation source` so I can produce an exact runnable README and a helper script?
